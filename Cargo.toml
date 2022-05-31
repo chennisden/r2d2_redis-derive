@@ -12,7 +12,7 @@ description = "This crate implements the redis::FromRedisValue and redis::ToRedi
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-redis = "0.21.5"
+r2d2_redis = "0.14"
 quote = "1.0.10"
 syn = {version = "1.0", features = ["extra-traits"]}
 

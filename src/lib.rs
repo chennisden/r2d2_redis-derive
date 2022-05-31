@@ -1,6 +1,6 @@
 //! # redis-derive
 
-//! This crate implements the ```redis::FromRedisValue``` and ```redis::ToRedisArgs``` traits from [mitsuhiko / redis-rs](https://github.com/mitsuhiko/redis-rs) for any struct, 
+//! This crate implements the ```r2d2_redis::redis::FromRedisValue``` and ```r2d2_redis::redis::ToRedisArgs``` traits from [mitsuhiko / redis-rs](https://github.com/mitsuhiko/redis-rs) for any struct, 
 //! this allows a seaming less type conversion between rust structs and Redis hash sets. 
 //! 
 //! This is more beneficial than JSON encoding the struct and storing the result in a Redis key because when saving as a Redis hash set, 
@@ -10,7 +10,7 @@
 //! 
 //! ## Example
 //! ```
-//! use redis::Commands;
+//! use r2d2_redis::redis::Commands;
 //! use redis_derive::{FromRedisValue, ToRedisArgs};
 //! 
 //! #[derive(FromRedisValue, ToRedisArgs, Debug)]
@@ -20,8 +20,8 @@
 //!     third_field : Vec<String>
 //! }
 //! 
-//! fn main() -> redis::RedisResult<()> {
-//!     let client = redis::Client::open("redis://127.0.0.1/")?;
+//! fn main() -> r2d2_redis::redis::RedisResult<()> {
+//!     let client = r2d2_redis::redis::Client::open("redis://127.0.0.1/")?;
 //!     let mut con = client.get_connection()?;
 //! 
 //!     let test1 = MySuperCoolStruct{
@@ -30,7 +30,7 @@
 //!         third_field : vec!["abc".to_owned(), "cba".to_owned()]
 //!     };
 //! 
-//!     let _ = redis::cmd("HMSET")
+//!     let _ = r2d2_redis::redis::cmd("HMSET")
 //!         .arg("test1")
 //!         .arg(&test1)
 //!         .query(&mut con)?;
@@ -55,14 +55,14 @@ use syn::{
 
 
 #[proc_macro_derive(ToRedisArgs)]
-/// This Derive Macro is responsible for Implementing the [`redis::ToRedisArgs`] trait for the decorated struct.
+/// This Derive Macro is responsible for Implementing the [`r2d2_redis::redis::ToRedisArgs`] trait for the decorated struct.
 pub fn to_redis_args(tokenstream : TokenStream) -> TokenStream {
     let abstract_syntax_tree = parse_macro_input!(tokenstream as DeriveInput);
     let struct_idententifier = abstract_syntax_tree.ident;
     let (field_idententifier_strs, field_idententifiers) = derive_fields(abstract_syntax_tree.data);
     quote!{
-        impl redis::ToRedisArgs for #struct_idententifier {
-            fn write_redis_args<W : ?Sized + redis::RedisWrite>(&self, out: &mut W) {
+        impl r2d2_redis::redis::ToRedisArgs for #struct_idententifier {
+            fn write_redis_args<W : ?Sized + r2d2_redis::redis::RedisWrite>(&self, out: &mut W) {
                 let mut redis_args : Vec<Vec<u8>> = Vec::new();
                 #(
                     redis_args = self.#field_idententifiers.to_redis_args();
@@ -87,32 +87,32 @@ pub fn to_redis_args(tokenstream : TokenStream) -> TokenStream {
 
 
 #[proc_macro_derive(FromRedisValue)]
-/// This Derive Macro is responsible for Implementing the [`redis::FromRedisValue`] trait for the decorated struct.
+/// This Derive Macro is responsible for Implementing the [`r2d2_redis::redis::FromRedisValue`] trait for the decorated struct.
 pub fn from_redis_value(tokenstream : TokenStream) -> TokenStream {
     let abstract_syntax_tree = parse_macro_input!(tokenstream as DeriveInput);
     let struct_idententifier = abstract_syntax_tree.ident;
     let (field_idententifier_strs, field_identifiers) = derive_fields(abstract_syntax_tree.data);
 
     quote!{
-        impl redis::FromRedisValue for #struct_idententifier {
-            fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+        impl r2d2_redis::redis::FromRedisValue for #struct_idententifier {
+            fn from_redis_value(v: &r2d2_redis::redis::Value) -> r2d2_redis::redis::RedisResult<Self> {
                 match v {
-                    redis::Value::Bulk(bulk_data) if bulk_data.len() % 2 == 0 => {
-                        let mut fields_hashmap : std::collections::HashMap<String, redis::Value> = std::collections::HashMap::new();
+                    r2d2_redis::redis::Value::Bulk(bulk_data) if bulk_data.len() % 2 == 0 => {
+                        let mut fields_hashmap : std::collections::HashMap<String, r2d2_redis::redis::Value> = std::collections::HashMap::new();
                         for values in bulk_data.chunks(2) {
-                            let full_identifier : String = redis::from_redis_value(&values[0])?;
+                            let full_identifier : String = r2d2_redis::redis::from_redis_value(&values[0])?;
                             match full_identifier.split_once('.') {
                                 Some((field_identifier, split_of_section)) => {
                                     match fields_hashmap.get_mut(field_identifier) {
-                                        Some(redis::Value::Bulk(bulk)) => {
-                                            bulk.push(redis::Value::Data(split_of_section.chars().map(|c| c as u8).collect()));
+                                        Some(r2d2_redis::redis::Value::Bulk(bulk)) => {
+                                            bulk.push(r2d2_redis::redis::Value::Data(split_of_section.chars().map(|c| c as u8).collect()));
                                             bulk.push(values[1].clone())
                                         },
                                         _ => {
-                                            let mut new_bulk : Vec<redis::Value> = Vec::new();
-                                            new_bulk.push(redis::Value::Data(split_of_section.chars().map(|c| c as u8).collect()));
+                                            let mut new_bulk : Vec<r2d2_redis::redis::Value> = Vec::new();
+                                            new_bulk.push(r2d2_redis::redis::Value::Data(split_of_section.chars().map(|c| c as u8).collect()));
                                             new_bulk.push(values[1].clone());
-                                            fields_hashmap.insert(field_identifier.to_owned(), redis::Value::Bulk(new_bulk));
+                                            fields_hashmap.insert(field_identifier.to_owned(), r2d2_redis::redis::Value::Bulk(new_bulk));
                                         }
                                     }
                                 },
@@ -124,19 +124,19 @@ pub fn from_redis_value(tokenstream : TokenStream) -> TokenStream {
                         Ok(
                             Self {
                                 #(
-                                    #field_identifiers : redis::from_redis_value(
+                                    #field_identifiers : r2d2_redis::redis::from_redis_value(
                                         fields_hashmap.get(
                                             #field_idententifier_strs
                                         )
-                                        .unwrap_or(&redis::Value::Nil)
+                                        .unwrap_or(&r2d2_redis::redis::Value::Nil)
                                     )?,
                                 )*
                             }
                         )
                     },
                     _ => Err(
-                        redis::RedisError::from((
-                            redis::ErrorKind::TypeError, 
+                        r2d2_redis::redis::RedisError::from((
+                            r2d2_redis::redis::ErrorKind::TypeError, 
                             "the data returned from the redis database was not in the bulk data format or the length of the bulk data is not devisable by two"))
                     )
                 }
